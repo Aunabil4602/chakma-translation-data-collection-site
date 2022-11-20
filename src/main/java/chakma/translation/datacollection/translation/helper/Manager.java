@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author aunabil.chakma
@@ -17,13 +18,13 @@ import java.util.*;
 @Component
 public class Manager {
 
-    public static Map<Integer, Integer> counts;
-    public static List<Question> questionList;
-    public static List<Question> samples;
-    public static int currentIndex = 0;
-    public static final int sampleSize = 5;
-    public static boolean isLoaded = false;
-    private SynchronizedCounter totalSubmissions;
+    private static Map<Integer, Integer> counts;
+    private static List<Question> questionList;
+    private static List<Question> samples;
+    private static AtomicInteger currentIndex;
+    private static final int sampleSize = 5;
+    private static boolean isLoaded = false;
+    private static AtomicInteger totalSubmissions;
 
     @Autowired
     private QuestionRepository questionRepository;
@@ -33,7 +34,7 @@ public class Manager {
 
     public QACommand getNextQA() {
         QACommand command = new QACommand(getNextAnswer());
-        command.setTotalSubmission(totalSubmissions.getValue());
+        command.setTotalSubmission(totalSubmissions.get());
         return command;
     }
 
@@ -44,32 +45,32 @@ public class Manager {
     }
 
     synchronized private Question getNextQuestion() {
-        if (currentIndex >= sampleSize || samples == null || samples.isEmpty()) {
+        if (currentIndex.get() >= sampleSize || samples == null || samples.isEmpty()) {
             createSample();
         }
 
-        return samples.get(currentIndex++);
+        return samples.get(currentIndex.getAndIncrement());
     }
 
-    /*better not to call manually / work once at begining*/
+    /*called once at springboot start*/
     public void load() {
         if (isLoaded) {
             return;
         }
 
-        // initialize
         questionList = Collections.synchronizedList(new ArrayList<>());
         counts = Collections.synchronizedMap(new HashMap<>());
-        totalSubmissions = new SynchronizedCounter();
+        totalSubmissions = new AtomicInteger();
+        currentIndex = new AtomicInteger();
+        currentIndex.set(0);
+        totalSubmissions.set(0);
 
-        // loading questions
         List<Question> questionListDb = questionRepository.findAll();
         questionListDb.forEach(q -> {
             questionList.add(q);
             counts.put(q.getId(), 0);
         });
 
-        // loading answer stats
         List<Answer> answerListDb = answerRepository.findAll();
         answerListDb.forEach(a -> {
             increment(a.getQuestion());
@@ -85,7 +86,7 @@ public class Manager {
         for (int i = 0; i < sampleSize; i++) {
             samples.add(questionList.get(i));
         }
-        currentIndex = 0;
+        currentIndex.set(0);
     }
 
     public void increment(Question question) {
@@ -93,18 +94,10 @@ public class Manager {
         Integer currentCount = counts.get(qid);
         currentCount++;
         counts.put(qid, currentCount);
-        totalSubmissions.increment();
+        totalSubmissions.incrementAndGet();
     }
 
-    private class SynchronizedCounter {
-        private int c = 0;
-
-        public synchronized void increment() {
-            c++;
-        }
-
-        public synchronized int getValue() {
-            return c;
-        }
+    public int getTotalSubmissions() {
+        return totalSubmissions.get();
     }
 }

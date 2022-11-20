@@ -33,6 +33,12 @@ public class TranslationController {
     @Autowired
     private AnswerRepository answerRepository;
 
+    @GetMapping(value = {"/", "/home"})
+    public String home(Model model) {
+        model.addAttribute("totalSubmission", manager.getTotalSubmissions());
+        return "home";
+    }
+
     @GetMapping(value = "/create")
     public String create(Model model) {
         model.addAttribute("command", manager.getNextQA());
@@ -75,12 +81,18 @@ public class TranslationController {
                 response.addHeader("Content-Disposition", "attachment; filename=" + FN);
                 PrintWriter writer = response.getWriter();
                 for (Answer answer : answerList) {
-                    writer.write(answer.getQuestion().getDescription() + " @@?@@ " + answer.getDescription() + "\n");
+                    writer.write(answer.getQuestion().getDescription() + " @@@@@ " + answer.getDescription() + "\n");
                 }
                 writer.flush();
             } catch (IOException e) {
                 System.out.println(e.getMessage());
             }
         }
+    }
+
+    @ResponseBody
+    @GetMapping("/totalSubmissions")
+    public String getTotalSubmission() {
+        return String.valueOf(manager.getTotalSubmissions());
     }
 }
